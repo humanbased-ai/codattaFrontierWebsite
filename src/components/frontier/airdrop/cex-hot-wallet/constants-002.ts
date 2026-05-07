@@ -73,9 +73,61 @@ const EXCHANGES_KH: ExchangeItemV2[] = [
   }
 ]
 
+const EXCHANGES_IN: ExchangeItemV2[] = [
+  {
+    name: 'Indodax',
+    official_website: 'https://indodax.com/',
+    deposit_history_text: 'Log in → Wallet → IDR → Deposit History',
+    withdrawal_history_text: 'Log in → Wallet → IDR → Withdrawal History'
+  },
+  {
+    name: 'Pintu',
+    official_website: 'https://pintu.co.id/',
+    deposit_history_text: 'Log in → Portfolio → Transaction History → Filter Deposit',
+    withdrawal_history_text: 'Log in → Portfolio → Transaction History → Filter Withdrawal'
+  },
+  {
+    name: 'Ajaib',
+    official_website: 'https://ajaib.co.id/kripto',
+    deposit_history_text: 'Log in → Ajaib Kripto → Portfolio → Transaction → Deposit',
+    withdrawal_history_text: 'Log in → Ajaib Kripto → Portfolio → Transaction → Withdrawal'
+  },
+  {
+    name: 'Nanovest',
+    official_website: 'https://www.nanovest.io/',
+    deposit_history_text: 'Log in → Portfolio → Transaction History → Deposit',
+    withdrawal_history_text: 'Log in → Portfolio → Transaction History → Withdrawal'
+  },
+  {
+    name: 'Tokocrypto',
+    official_website: 'https://www.tokocrypto.com/',
+    deposit_history_text: 'Log in → Wallet → Fiat and Spot → Transaction History → Deposit',
+    withdrawal_history_text: 'Log in → Wallet → Fiat and Spot → Transaction History → Withdrawal'
+  },
+  {
+    name: 'Reku',
+    official_website: 'https://reku.id/',
+    deposit_history_text: 'Log in → Portfolio → Transaction History → Filter: Deposit',
+    withdrawal_history_text: 'Log in → Portfolio → Transaction History → Filter: Withdrawal'
+  },
+  {
+    name: 'Triv',
+    official_website: 'https://triv.co.id/',
+    deposit_history_text: 'Log in → Account → Mutation / History → Filter: Deposit',
+    withdrawal_history_text: 'Log in → Account → Mutation / History → Filter: Withdrawal'
+  },
+  {
+    name: 'Bittime',
+    official_website: 'https://www.bittime.com/',
+    deposit_history_text: 'Log in → Wallet → Transaction History → Deposit',
+    withdrawal_history_text: 'Log in → Wallet → Transaction History → Withdrawal'
+  }
+]
+
 const EXCHANGES_V2_MAP: Record<number, ExchangeItemV2[]> = {
   1: EXCHANGES_TH,
-  2: EXCHANGES_KH
+  2: EXCHANGES_KH,
+  3: EXCHANGES_IN
 }
 
 export const getExchangesV2 = (group: number): ExchangeItemV2[] => {
