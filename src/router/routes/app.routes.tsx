@@ -1,8 +1,14 @@
-import { Route, Navigate } from 'react-router-dom'
+import { Route } from 'react-router-dom'
 import { lazy } from 'react'
 
 import AppLayout from '@/layouts/app-layout'
 import UserInfoLayout from '@/layouts/userinfo-layout'
+
+// --- Migration landing (root) ---
+// Replaces the prior `Navigate to="/app"` so visitors to `app.codatta.io`
+// see the "Codatta is now Humanbased." brand-rename announcement first.
+// Existing `/app/*` deep links still work for current users.
+const MigrationLanding = lazy(() => import('@/views/migration-landing'))
 
 // --- Home & top-level app pages ---
 const Home = lazy(() => import('@/views/home'))
@@ -56,7 +62,7 @@ const ReferralApp = lazy(() => import('@/views/referral-app'))
 
 export const appRoutes = (
   <>
-    <Route index element={<Navigate to="/app" />} />
+    <Route index element={<MigrationLanding />} />
 
     {/* Mobile routes */}
     <Route path="/m">
