@@ -57,13 +57,9 @@ function baseResponseInterceptor(res: AxiosResponse) {
 }
 
 function errorResponseInterceptor(err: AxiosError) {
-  if (err.status === 401) {
-    localStorage.removeItem('uid')
-    localStorage.removeItem('token')
-    localStorage.removeItem('auth')
-
+  if ((err.response?.status ?? err.status) === 401) {
     const url = authRedirect()
-    window.location.href = url
+    if (window.location.pathname !== '/account/signin') window.location.href = url
   }
   return Promise.reject(err)
 }
