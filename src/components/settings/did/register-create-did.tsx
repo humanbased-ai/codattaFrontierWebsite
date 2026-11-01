@@ -1,6 +1,6 @@
 import { Button, message, Spin } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { decodeEventLog, getAddress, PublicClient } from 'viem'
+import { getAddress, PublicClient } from 'viem'
 import { ExternalLink } from 'lucide-react'
 import { useCodattaConnectContext } from 'codatta-connect'
 
@@ -13,6 +13,7 @@ import FailIcon from '@/assets/userinfo/close-line-icon.svg?react'
 import { shortenAddress } from '@/utils/format'
 import contract from '@/contracts/did-base-registrar.abi'
 import registryContract from '@/contracts/did-base-registry.abi'
+import { registeredDidFromReceipt } from '@/utils/did-receipt'
 import accountApi from '@/apis/account.api'
 import { useUserStore } from '@/stores/user.store'
 
@@ -207,49 +208,15 @@ export default function CreatDid({ rpcClient, contractArgs, estimateGas, did, on
         setStep1Status(StepStatus.CONFIRMING)
         const receipt = await rpcClient.waitForTransactionReceipt({ hash: tx as `0x${string}` })
         console.log('waitForTransactionReceipt', receipt)
-        // sync onchain status to backend
-        const status = receipt.status === 'success' ? 2 : 3
-        if (status === 2) {
-          // Parse DIDRegistered event to get the generated DID
-          if (receipt.logs && receipt.logs.length > 0) {
-            try {
-              let didRegisteredLog = null
-
-              for (const log of receipt.logs) {
-                try {
-                  const decodedLog = decodeEventLog({
-                    abi: registryContract.abi,
-                    data: log.data,
-                    topics: log.topics
-                  })
-
-                  if (decodedLog.eventName === 'DIDRegistered') {
-                    didRegisteredLog = decodedLog
-                    break
-                  }
-                } catch {
-                  // Skip logs that don't match our ABI
-                  continue
-                }
-              }
-
-              if (didRegisteredLog) {
-                const args = didRegisteredLog.args as unknown as { identifier: bigint; owner: string }
-                const didIdentifier = args.identifier
-
-                setDidIdentifier(didIdentifier.toString())
-                setStep1Status(StepStatus.SUCCESS)
-              } else {
-                console.error('DIDRegistered event not found in transaction receipt')
-                throw new Error('DIDRegistered event not found in transaction receipt')
-              }
-            } catch (error) {
-              console.error('Error parsing logs:', error)
-            }
-          }
-
-          setTxHash(receipt.transactionHash)
-        }
+        setTxHash(receipt.transactionHash)
+        const identifier = registeredDidFromReceipt(
+          receipt,
+          registryContract.abi,
+          registryContract.address as `0x${string}`,
+          address
+        )
+        setDidIdentifier(identifier.toString())
+        setStep1Status(StepStatus.SUCCESS)
 
         console.log('receipt', receipt)
       } catch (error) {
