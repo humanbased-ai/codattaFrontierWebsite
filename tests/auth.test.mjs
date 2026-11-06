@@ -1,50 +1,91 @@
-// Run with Node 22.18+ / 24: node --experimental-strip-types --test tests/auth.test.mjs
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import cookies from 'js-cookie'
-import { authRedirect, clearAuthentication } from '../src/utils/auth.ts'
+import { authRedirect, clearClientAuthentication, getAuthToken } from '../src/utils/auth.ts'
 
-test('logout clears storage and visible root/ancestor-domain cookies', () => {
-  const values = new Map([
+function fixture(cookieValue) {
+  const originals = new Map(
+    ['window', 'document', 'localStorage', 'sessionStorage'].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key)
+    ])
+  )
+  const local = new Map([
     ['auth', 'stored-token'],
     ['token', 'legacy'],
     ['uid', '1'],
     ['theme', 'dark']
   ])
-  const originalRemove = cookies.remove
-  const expired = []
-  globalThis.localStorage = { removeItem: (key) => values.delete(key) }
-  globalThis.window = { location: { href: 'https://app.codatta.io/app/tasks?tab=mine' } }
-  cookies.remove = (name, attributes) => expired.push({ name, ...attributes })
+  const session = new Map()
+  const writes = []
+  let cookie = cookieValue
+  const storage = (values) => ({
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key)
+  })
+  Object.defineProperties(globalThis, {
+    window: { configurable: true, value: { location: { href: 'https://app.codatta.io/app/tasks?tab=mine' } } },
+    document: {
+      configurable: true,
+      value: {
+        get cookie() {
+          return 'auth=' + cookie
+        },
+        // A host-only expiry cannot delete the existing shared-domain cookie.
+        set cookie(value) {
+          writes.push(value)
+        }
+      }
+    },
+    localStorage: { configurable: true, value: storage(local) },
+    sessionStorage: { configurable: true, value: storage(session) }
+  })
+  return {
+    local,
+    session,
+    writes,
+    replaceCookie: (value) => {
+      cookie = value
+    },
+    restore() {
+      for (const [key, descriptor] of originals) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+        else delete globalThis[key]
+      }
+    }
+  }
+}
+
+test('building a sign-in URL has no authentication side effects', () => {
+  const f = fixture('redirect-cookie')
   try {
-    const redirect = authRedirect()
-    assert.equal(redirect, '/account/signin?from=%2Fapp%2Ftasks%3Ftab%3Dmine')
-    assert.deepEqual([...values], [['theme', 'dark']])
-    assert.ok(expired.some((c) => c.name === 'auth' && c.path === '/' && c.domain === undefined))
-    assert.ok(expired.some((c) => c.path === '/' && c.domain === 'codatta.io'))
-    assert.ok(expired.some((c) => c.path === '/app/' && c.domain === 'app.codatta.io'))
-    assert.ok(expired.every((c) => c.name === 'auth'))
+    assert.equal(authRedirect(), '/account/signin?from=%2Fapp%2Ftasks%3Ftab%3Dmine')
+    assert.equal(getAuthToken(), 'redirect-cookie')
+    assert.equal(f.local.size, 4)
+    assert.equal(f.session.size, 0)
+    assert.deepEqual(f.writes, [])
   } finally {
-    cookies.remove = originalRemove
+    f.restore()
   }
 })
 
-test('cookie-only authentication is expired, including on localhost', () => {
-  const originalRemove = cookies.remove
-  let auth = 'expired-test-cookie'
-  const attempts = []
-  globalThis.localStorage = { removeItem() {} }
-  globalThis.window = { location: { href: 'http://localhost:5173/account/signin' } }
-  cookies.remove = (name, attributes) => {
-    attempts.push(attributes)
-    if (name === 'auth' && attributes.path === '/' && !attributes.domain) auth = undefined
-  }
+test('client cleanup suppresses an undeletable cookie across reload without deleting parent-domain cookies', async () => {
+  const f = fixture('rejected-cookie')
   try {
-    clearAuthentication()
-    clearAuthentication()
-    assert.equal(auth, undefined)
-    assert.ok(attempts.every((a) => !a.domain || a.domain === 'localhost'))
+    clearClientAuthentication()
+    assert.equal(getAuthToken(), undefined)
+    assert.deepEqual([...f.local], [['theme', 'dark']])
+    assert.equal(f.writes.length, 1)
+    assert.ok(f.writes[0].startsWith('auth=; path=/'))
+    assert.match(f.writes[0], /expires=/i)
+    assert.doesNotMatch(f.writes[0], /domain=/i)
+    assert.equal(f.session.size, 1)
+    assert.ok([...f.session.values()].every((value) => value !== 'rejected-cookie' && /^[a-f0-9]{64}$/.test(value)))
+    const reloaded = await import('../src/utils/auth.ts?reload-test')
+    assert.equal(reloaded.getAuthToken(), undefined)
+    f.replaceCookie('new-login-cookie')
+    assert.equal(reloaded.getAuthToken(), 'new-login-cookie')
   } finally {
-    cookies.remove = originalRemove
+    f.restore()
   }
 })

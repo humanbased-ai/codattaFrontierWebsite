@@ -1,4 +1,4 @@
-import { authRedirect } from '@/utils/auth'
+import { authRedirect, clearClientAuthentication } from '@/utils/auth'
 import { AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import CryptoJS from 'crypto-js'
 
@@ -29,9 +29,7 @@ export const baseResponseInterceptor = (res: AxiosResponse) => {
     return res
   } else {
     if ([1003, 2011].includes(res.data.errorCode)) {
-      localStorage.removeItem('uid')
-      localStorage.removeItem('token')
-      localStorage.removeItem('auth')
+      clearClientAuthentication()
 
       const url = authRedirect()
       window.location.href = url

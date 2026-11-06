@@ -1,6 +1,6 @@
 import userApi, { UserInfo, UserUpdateParams } from '@/apis/user.api'
 import CustomAlert from '@/components/account/custom-alert'
-import { authRedirect } from '@/utils/auth'
+import { authRedirect, clearClientAuthentication } from '@/utils/auth'
 import React, { useState } from 'react'
 import { Button } from 'antd'
 import { createRoot } from 'react-dom/client'
@@ -206,9 +206,7 @@ async function getUserInfo() {
 }
 
 function logout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('uid')
-  localStorage.removeItem('auth')
+  clearClientAuthentication()
   const url = authRedirect()
   window.location.href = url
 }

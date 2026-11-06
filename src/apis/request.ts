@@ -1,7 +1,6 @@
 import { appStoreActions } from '@/stores/app.store'
-import { authRedirect } from '@/utils/auth'
+import { authRedirect, clearClientAuthentication, getAuthToken } from '@/utils/auth'
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
-import cookies from 'js-cookie'
 
 const request = axios.create({
   baseURL: '/api',
@@ -15,7 +14,7 @@ function authRequestInterceptor(config: InternalAxiosRequestConfig) {
   // location.hash is used for local development to mock app container
   const userAgent = navigator.userAgent.toLowerCase()
   const isApp = userAgent.includes('codatta') || location.hash?.toLowerCase().includes('codatta')
-  const token = cookies.get('auth') || localStorage.getItem('auth')
+  const token = getAuthToken()
 
   // Detect device type based on user agent
   const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent)
@@ -58,8 +57,9 @@ function baseResponseInterceptor(res: AxiosResponse) {
 
 function errorResponseInterceptor(err: AxiosError) {
   if ((err.response?.status ?? err.status) === 401) {
+    clearClientAuthentication()
     const url = authRedirect()
-    if (window.location.pathname !== '/account/signin') window.location.href = url
+    if (!/^\/account\/signin\/?$/.test(window.location.pathname)) window.location.href = url
   }
   return Promise.reject(err)
 }

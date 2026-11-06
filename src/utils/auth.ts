@@ -1,37 +1,50 @@
-/**
- * Authentication utilities
- */
 import cookies from 'js-cookie'
+import CryptoJS from 'crypto-js'
 
-/** Expire readable auth cookies at paths and parent domains visible to this page. */
-export function clearAuthentication() {
+const rejectedCookieKey = 'codatta:rejected-auth-cookie'
+let rejectedCookieFingerprint: string | null = null
+
+function fingerprint(token: string) {
+  return CryptoJS.SHA256(token).toString()
+}
+
+/** Resolve credentials without reusing a cookie rejected by this app/tab. */
+export function getAuthToken() {
+  const cookie = cookies.get('auth')
+  if (cookie) {
+    let rejected = rejectedCookieFingerprint
+    try {
+      rejected = sessionStorage.getItem(rejectedCookieKey) ?? rejected
+    } catch {
+      /* Storage may be unavailable. */
+    }
+    if (fingerprint(cookie) !== rejected) return cookie
+  }
+  return localStorage.getItem('auth') || undefined
+}
+
+/** Clear this app's client credentials; this does not revoke a server session. */
+export function clearClientAuthentication() {
+  const cookie = cookies.get('auth')
+  if (cookie) {
+    rejectedCookieFingerprint = fingerprint(cookie)
+    try {
+      sessionStorage.setItem(rejectedCookieKey, rejectedCookieFingerprint)
+    } catch {
+      /* Keep the in-memory rejection. */
+    }
+  }
   localStorage.removeItem('token')
   localStorage.removeItem('uid')
   localStorage.removeItem('auth')
-
-  const url = new URL(window.location.href)
-  const paths = new Set(['/'])
-  let current = ''
-  for (const part of url.pathname.split('/').filter(Boolean)) {
-    current += `/${part}`
-    paths.add(current)
-    paths.add(`${current}/`)
-  }
-  const domains: (string | undefined)[] = [undefined, url.hostname]
-  const labels = url.hostname.split('.')
-  // A domain cookie may have been set by a parent application domain.
-  for (let i = 1; i < labels.length - 1; i++) domains.push(labels.slice(i).join('.'))
-  for (const path of paths) {
-    for (const domain of domains) {
-      cookies.remove('auth', { path, ...(domain ? { domain } : {}) })
-    }
-  }
+  // Only delete the host-scoped root cookie. Shared-domain cookies are left
+  // intact and suppressed locally instead of logging other applications out.
+  cookies.remove('auth', { path: '/' })
 }
 
+/** Build a return URL without changing authentication during React rendering. */
 export function authRedirect() {
-  clearAuthentication()
   const url = new URL(window.location.href)
   const from = url.pathname + url.search
-  const redirect = `/account/signin?from=${encodeURIComponent(from)}`
-  return redirect
+  return `/account/signin?from=${encodeURIComponent(from)}`
 }
