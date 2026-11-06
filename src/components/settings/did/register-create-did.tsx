@@ -1,5 +1,5 @@
 import { Button, message, Spin } from 'antd'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAddress, PublicClient } from 'viem'
 import { ExternalLink } from 'lucide-react'
 import { useCodattaConnectContext } from 'codatta-connect'
@@ -14,6 +14,7 @@ import { shortenAddress } from '@/utils/format'
 import contract from '@/contracts/did-base-registrar.abi'
 import registryContract from '@/contracts/did-base-registry.abi'
 import { registeredDidFromReceipt } from '@/utils/did-receipt'
+import { createSubmittedTransaction } from '@/utils/submitted-transaction'
 import accountApi from '@/apis/account.api'
 import { useUserStore } from '@/stores/user.store'
 
@@ -62,6 +63,8 @@ export default function CreatDid({ rpcClient, contractArgs, estimateGas, did, on
   const [loading, setLoading] = useState(false)
   const [didIdentifier, setDidIdentifier] = useState<string>()
   const [txHash, setTxHash] = useState<string>('')
+  const transaction = useRef(createSubmittedTransaction())
+  const transactionPending = useRef(false)
   const [step1Status, setStep1Status] = useState<StepStatus>(StepStatus.IDLE)
   const [step2Status, setStep2Status] = useState<StepStatus>(StepStatus.IDLE)
   // ============================================================================
@@ -80,7 +83,7 @@ export default function CreatDid({ rpcClient, contractArgs, estimateGas, did, on
       case StepStatus.CONFIRMING:
         return 'Transaction submitted. Waiting for on-chain confirmation...'
       case StepStatus.CONFIRM_FAILED:
-        return 'Transaction failed or timed out. Please retry.'
+        return 'Registration could not be confirmed. Retry checks the existing transaction.'
       case StepStatus.SUCCESS:
         return 'DID created successfully'
       default:
@@ -147,7 +150,7 @@ export default function CreatDid({ rpcClient, contractArgs, estimateGas, did, on
       case StepStatus.CONFIRMING:
         return 'Confirming on-chain...'
       case StepStatus.CONFIRM_FAILED:
-        return 'Resubmit Transaction'
+        return 'Check Transaction'
       default:
         return 'Confirm & Create'
     }
@@ -169,69 +172,60 @@ export default function CreatDid({ rpcClient, contractArgs, estimateGas, did, on
   // ============================================================================
   // Business Logic - Step 1: Create DID On-chain
   // ============================================================================
-  const createDid = useCallback(async () => {
-    setLoading(true)
-    if (!address) return
-
-    let tx: string | undefined
-    try {
-      console.log('Contract call params:', {
-        account: address,
-        contractAddress: contract.address,
-        functionName: 'registerWithAuthorization',
-        args: contractArgs,
-        chain: contract.chain.name
-      })
-
+  const confirmDid = useCallback(
+    async (hash: `0x${string}`) => {
+      setStep1Status(StepStatus.CONFIRMING)
       try {
-        setStep1Status(StepStatus.SIGNING)
-        const { request } = await rpcClient.simulateContract({
-          account: address as `0x${string}`,
-          address: contract.address as `0x${string}`,
-          abi: contract.abi,
-          functionName: 'registerWithAuthorization',
-          args: contractArgs,
-          chain: contract.chain
-        })
-
-        tx = await lastUsedWallet?.client?.writeContract(request)
-
-        if (!tx) throw new Error('Transaction failed')
-      } catch (error) {
-        console.error(error)
-        message.error(error.details || error.message)
-        setStep1Status(StepStatus.SIGN_FAILED)
-        return
-      }
-
-      try {
-        setStep1Status(StepStatus.CONFIRMING)
-        const receipt = await rpcClient.waitForTransactionReceipt({ hash: tx as `0x${string}` })
-        console.log('waitForTransactionReceipt', receipt)
-        setTxHash(receipt.transactionHash)
+        const receipt = await rpcClient.waitForTransactionReceipt({ hash })
         const identifier = registeredDidFromReceipt(
           receipt,
           registryContract.abi,
-          registryContract.address as `0x${string}`,
-          address
+          registryContract.address as `0x${string}`
         )
         setDidIdentifier(identifier.toString())
         setStep1Status(StepStatus.SUCCESS)
-
-        console.log('receipt', receipt)
       } catch (error) {
         console.error(error)
         message.error(error.details || error.message)
         setStep1Status(StepStatus.CONFIRM_FAILED)
-        return
       }
+    },
+    [rpcClient]
+  )
+
+  const createDid = useCallback(async () => {
+    if (transactionPending.current) return
+    if (!transaction.current.hash && (!address || !lastUsedWallet?.client)) return
+    transactionPending.current = true
+    setLoading(true)
+    try {
+      await transaction.current.run(
+        async () => {
+          setStep1Status(StepStatus.SIGNING)
+          const { request } = await rpcClient.simulateContract({
+            account: address as `0x${string}`,
+            address: contract.address as `0x${string}`,
+            abi: contract.abi,
+            functionName: 'registerWithAuthorization',
+            args: contractArgs,
+            chain: contract.chain
+          })
+          const hash = await lastUsedWallet?.client?.writeContract(request)
+          if (!hash) throw new Error('Transaction failed')
+          return hash
+        },
+        confirmDid,
+        setTxHash
+      )
     } catch (error) {
       console.error(error)
       message.error(error.details || error.message)
+      setStep1Status(transaction.current.hash ? StepStatus.CONFIRM_FAILED : StepStatus.SIGN_FAILED)
     } finally {
+      transactionPending.current = false
       setLoading(false)
     }
-  }, [address, contractArgs, lastUsedWallet?.client, rpcClient])
+  }, [address, contractArgs, lastUsedWallet?.client, rpcClient, confirmDid])
 
   // ============================================================================
   // Business Logic - Step 2: Bind DID to Account

@@ -11,7 +11,8 @@
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
     "prepare": "husky",
-    "commit": "git-cz"
+    "commit": "git-cz",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "repository": {
     "type": "git",

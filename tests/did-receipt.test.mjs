@@ -1,4 +1,3 @@
-// Run with Node 22.18+ / 24: node --experimental-strip-types --test tests/did-receipt.test.mjs
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { encodeAbiParameters, keccak256, stringToHex, parseAbi } from 'viem'
@@ -13,15 +12,15 @@ const log = (address = registry, account = owner) => ({
   data: encodeAbiParameters([{ type: 'uint128' }, { type: 'address' }], [16n, account]),
   topics: [keccak256(stringToHex('DIDRegistered(uint128,address)'))]
 })
-const read = (receipt) => registeredDidFromReceipt(receipt, abi, registry, owner)
+const read = (receipt) => registeredDidFromReceipt(receipt, abi, registry)
 
-test('reverted, missing and unrelated events cannot keep confirmation pending or establish a DID', () => {
+test('reverted, missing, malformed and unrelated events cannot establish a DID', () => {
   assert.throws(() => read({ status: 'reverted', logs: [log()] }), /reverted/)
-  assert.throws(() => read({ status: 'success', logs: [] }), /not found/)
-  assert.throws(() => read({ status: 'success', logs: [log(other)] }), /not found/)
-  assert.throws(() => read({ status: 'success', logs: [log(registry, other)] }), /not found/)
+  for (const logs of [[], [log(other)], [{ ...log(), data: '0x' }], [log(), log()]]) {
+    assert.throws(() => read({ status: 'success', logs }), /unique/)
+  }
 })
 
-test('a matching registry and owner returns the original bigint identifier', () => {
-  assert.equal(read({ status: 'success', logs: [{ ...log(), data: '0x' }, log()] }), 16n)
+test('one valid registry event returns its bigint without assuming the owner is the sender', () => {
+  assert.equal(read({ status: 'success', logs: [{ ...log(), data: '0x' }, log(registry, other)] }), 16n)
 })
