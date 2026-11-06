@@ -1,60 +1,37 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { calculateGasFeeFromApi, getChainKeyByChainId } from '@/utils/gas-calculator'
+import { createGasQuoteController, type GasQuoteState } from '@/utils/gas-quote'
 
 interface UseGasFeeOptions {
   gasLimit: number
   chainId?: number
   enabled?: boolean
-  tokenAddress: string // ERC20 token address for fee calculation
+  tokenAddress: string
 }
 
-interface UseGasFeeResult {
-  gasFee: string | null
-  isLoading: boolean
-  error: Error | null
+interface UseGasFeeResult extends GasQuoteState {
   refetch: () => Promise<void>
 }
 
-/**
- * Hook to calculate and manage gas fee estimation in specific ERC20 token
- *
- * @param options - Configuration options
- * @returns Gas fee state and controls
- */
+/** Quotes belong to one token/chain request; late results are discarded. */
 export function useGasFee({ gasLimit, chainId, enabled = true, tokenAddress }: UseGasFeeOptions): UseGasFeeResult {
-  const [gasFee, setGasFee] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
+  const [state, setState] = useState<GasQuoteState>({ gasFee: null, isLoading: false, error: null })
+  const controller = useMemo(() => createGasQuoteController(setState), [])
 
-  const fetchGasFee = useCallback(async () => {
-    if (!enabled || !chainId || !tokenAddress) {
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const chainKey = getChainKeyByChainId(chainId)
-      const fee = await calculateGasFeeFromApi(gasLimit, chainKey, tokenAddress)
-      setGasFee(fee.toFixed(4))
-    } catch (err) {
-      const error = err as Error
-      setError(error)
-      console.error('Failed to fetch gas fee:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [enabled, chainId, gasLimit, tokenAddress])
+  const fetchGasFee = useCallback(
+    () =>
+      controller.fetch(
+        enabled && chainId && tokenAddress
+          ? () => calculateGasFeeFromApi(gasLimit, getChainKeyByChainId(chainId), tokenAddress)
+          : undefined
+      ),
+    [controller, enabled, chainId, gasLimit, tokenAddress]
+  )
 
   useEffect(() => {
-    fetchGasFee()
-  }, [fetchGasFee])
+    void fetchGasFee()
+    return () => controller.cancel()
+  }, [controller, fetchGasFee])
 
-  return {
-    gasFee,
-    isLoading,
-    error,
-    refetch: fetchGasFee
-  }
+  return { ...state, refetch: fetchGasFee }
 }
