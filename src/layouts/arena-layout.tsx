@@ -4,12 +4,12 @@ import { useEffect } from 'react'
 import { userStoreActions } from '@/stores/user.store'
 import { arenaStoreActions } from '@/stores/arena.store'
 // import ArenaNav from '@/components/arena/arena-nav'
-import cookies from 'js-cookie'
+import { getAuthToken } from '@/utils/auth'
 import ArenaHeader from '@/components/arena/arena-header'
 
 export default function ArenaLayout() {
   useEffect(() => {
-    const token = cookies.get('auth') || localStorage.getItem('auth')
+    const token = getAuthToken()
     if (token) userStoreActions.getUserInfo()
     arenaStoreActions.getModelList()
   }, [])

@@ -2,7 +2,7 @@ import { useUserStore } from '@/stores/user.store'
 import { Avatar, Tooltip } from 'antd'
 import { LogOut } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { authRedirect } from '@/utils/auth'
+import { authRedirect, clearClientAuthentication } from '@/utils/auth'
 import { TRACK_CATEGORY, trackEvent } from '@/utils/analytics'
 
 export default function AppUser() {
@@ -10,9 +10,7 @@ export default function AppUser() {
 
   const handleLogout: React.MouseEventHandler = (e) => {
     e.preventDefault()
-    localStorage.removeItem('token')
-    localStorage.removeItem('uid')
-    localStorage.removeItem('auth')
+    clearClientAuthentication()
     const url = authRedirect()
     trackEvent(TRACK_CATEGORY.BTN_CLICK, { method: 'click', contentType: 'logout' })
     window.location.href = url
